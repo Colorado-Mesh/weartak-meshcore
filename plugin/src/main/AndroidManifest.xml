@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+    WearTAK binds only to plugin services protected by this permission, and WearTAK requests it.
+    No WearTAK release defines it (checked against weartak-wearos, 13 Nov 2026), so the plugin
+    defines it here. Normal protection: Android grants it to WearTAK, which asked for it.
+    Open question for the WearTAK dev: is this how the plugin template does it?
+    -->
+    <permission
+        android:name="com.weartak.plugin.permission.BIND_PLUGIN"
+        android:protectionLevel="normal" />
+
+    <uses-feature android:name="android.hardware.type.watch" />
+
+    <queries>
+        <!-- WearTAK release and dev builds, to check who is calling. -->
+        <package android:name="com.aitech.weartak_civ" />
+        <package android:name="com.aitech.weartak_civ.dev" />
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:supportsRtl="true">
+
+        <!-- This app has no screen of its own: it runs as a plugin inside WearTAK. -->
+        <uses-library
+            android:name="com.google.android.wearable"
+            android:required="false" />
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
+        <service
+            android:name=".MeshCorePluginService"
+            android:exported="true"
+            android:permission="com.weartak.plugin.permission.BIND_PLUGIN">
+            <intent-filter>
+                <action android:name="com.weartak.plugin.action.PLUGIN_SERVICE" />
+            </intent-filter>
+            <!-- The line WearTAK shows under the plugin's name in its Plugins menu. -->
+            <meta-data
+                android:name="com.weartak.plugin.MENU_SUBTITLE"
+                android:value="@string/menu_subtitle" />
+        </service>
+    </application>
+</manifest>

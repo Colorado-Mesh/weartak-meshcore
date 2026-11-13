@@ -1,0 +1,3 @@
+[submodule "weartak-plugin-sdk"]
+	path = weartak-plugin-sdk
+	url = https://github.com/aegorsuch/weartak-plugin-sdk.git
