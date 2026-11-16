@@ -42,4 +42,4 @@ Send the full log either way. The interesting failures:
 ## Things to know
 
 - **Signing certificate pinning.** WearTAK trusts a plugin's signing certificate the first time it sees the plugin, then refuses that package if the certificate ever changes. All debug builds, local and CI, are signed with the shared key in `plugin/debug.keystore` (SHA-256 `3A:82:BE:D5:97:FA:BB:FC:35:F7:E0:8D:0D:5D:AD:B9:BC:0E:21:77:FC:95:21:AA:1B:3F:85:94:9C:7C:14:56`), so they can replace one another. A build signed any other way, including the TPC-signed release later, means uninstalling the plugin and clearing WearTAK's data first.
-- **The bind permission.** The plugin defines `com.weartak.plugin.permission.BIND_PLUGIN` itself, because no WearTAK build defines it. If WearTAK was installed before the plugin and still can't bind, try reinstalling WearTAK after the plugin, and tell the WearTAK dev.
+- **The bind permission.** WearTAK defines `com.weartak.plugin.permission.BIND_PLUGIN` (signature level) and holds it; the plugin only requires it on its service. Older WearTAK builds requested it without defining it, so the plugin could not be bound by them; use a current WearTAK build.

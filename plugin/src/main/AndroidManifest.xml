@@ -2,14 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-    WearTAK binds only to plugin services protected by this permission, and WearTAK requests it.
-    No WearTAK release defines it (checked against weartak-wearos, 13 Nov 2026), so the plugin
-    defines it here. Normal protection: Android grants it to WearTAK, which asked for it.
-    Open question for the WearTAK dev: is this how the plugin template does it?
+    The plugin service below is protected by com.weartak.plugin.permission.BIND_PLUGIN. WearTAK
+    defines that permission (signature level) and holds it, so only WearTAK can bind. The plugin
+    must not define it: Android refuses to install WearTAK while another app owns it
+    (INSTALL_FAILED_DUPLICATE_PERMISSION).
     -->
-    <permission
-        android:name="com.weartak.plugin.permission.BIND_PLUGIN"
-        android:protectionLevel="normal" />
 
     <uses-feature android:name="android.hardware.type.watch" />
 
