@@ -34,7 +34,7 @@ Send the full log either way. The interesting failures:
 
 | Log line | Meaning |
 | --- | --- |
-| Plugin not in the list at all | WearTAK didn't find it: the bind permission or intent filter didn't match |
+| Plugin not in the list at all (`CEP-PluginDiag: discovered plugins:` is empty) | WearTAK didn't find it: the bind permission or intent filter didn't match. The filter needs the `DEFAULT` category, because WearTAK queries with `MATCH_DEFAULT_ONLY` |
 | `trust_failure:…` | WearTAK's trust check refused it |
 | `api_version_mismatch` | WearTAK doesn't accept API version 2 |
 | `registerTransport: code 8` | UNSUPPORTED: WearTAK found nothing in common with what the plugin offered |

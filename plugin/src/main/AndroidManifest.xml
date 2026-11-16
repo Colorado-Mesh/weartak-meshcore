@@ -36,8 +36,13 @@
             android:name=".MeshCorePluginService"
             android:exported="true"
             android:permission="com.weartak.plugin.permission.BIND_PLUGIN">
+            <!--
+            WearTAK finds plugins with PackageManager.MATCH_DEFAULT_ONLY (on API 33+), which only
+            matches intent filters that also carry the DEFAULT category.
+            -->
             <intent-filter>
                 <action android:name="com.weartak.plugin.action.PLUGIN_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <!-- The line WearTAK shows under the plugin's name in its Plugins menu. -->
             <meta-data
