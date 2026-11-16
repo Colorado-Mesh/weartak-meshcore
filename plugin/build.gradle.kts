@@ -16,7 +16,24 @@ android {
         versionName = "0.0.1-dev"
     }
 
+    signingConfigs {
+        // One debug key for every build, local and CI. WearTAK pins a plugin's signing
+        // certificate the first time it sees it and then refuses any other, so debug builds
+        // signed with each machine's own debug key could not replace one another. This key is
+        // for debug builds only and is public on purpose; it uses Android's standard debug
+        // passwords.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         getByName("release") {
             isMinifyEnabled = false
             // Release signing is not set up: published builds are expected to be signed by the
