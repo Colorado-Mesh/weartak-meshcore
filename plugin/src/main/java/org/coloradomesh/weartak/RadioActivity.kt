@@ -169,7 +169,7 @@ class RadioActivity : ComponentActivity() {
                 if (!permitted) item { WideChip("Allow Bluetooth") { withPermissions {} } }
                 item { WideChip(if (current == null) "Find a radio" else "Choose another radio", secondary = current != null) { scan() } }
                 if (current != null) {
-                    item { WideChip("Try again now", secondary = true, enabled = link is LinkState.Waiting) { RadioLink.restart(this@RadioActivity) } }
+                    item { WideChip("Try again now", secondary = true, enabled = link is LinkState.Waiting || link is LinkState.Connecting) { RadioLink.restart(this@RadioActivity) } }
                     item { WideChip("Forget radio", secondary = true) { forget() } }
                 }
                 item { Note("One app per radio: disconnect it in WearMesh or the MeshCore app before using it here.") }

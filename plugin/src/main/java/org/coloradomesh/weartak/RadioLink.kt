@@ -42,6 +42,13 @@ object RadioLink {
     /** The name the plugin gives the radio when it says hello; the radio keeps up to 12 bytes. */
     private const val APP_NAME = "WearTAK"
 
+    /**
+     * How long a link may take, from opening to the end of start-up, before it is closed and
+     * tried again. The link gives up on its own if it cannot connect, but a radio that connects
+     * and then never answers the first sync would otherwise leave it Connecting for good.
+     */
+    private const val START_UP_TIMEOUT_MS = 120_000L
+
     private val main = Handler(Looper.getMainLooper())
     private val listeners = LinkedHashSet<(LinkState) -> Unit>()
 
@@ -130,6 +137,7 @@ object RadioLink {
                 main.post {
                     if (mine != generation || state is LinkState.Connected) return@post
                     failures = 0
+                    main.removeCallbacks(startUpTimeout)
                     Log.i(TAG, "radio link up: ${label()}")
                     set(LinkState.Connected(label()))
                 }
@@ -150,10 +158,24 @@ object RadioLink {
             onClosed = { reason -> main.post { if (mine == generation) closed(reason) } },
         )
         session = opened
+        main.postDelayed(startUpTimeout, START_UP_TIMEOUT_MS)
         opened.open()
     }
 
+    private val startUpTimeout = Runnable {
+        if (state is LinkState.Connected || session == null) return@Runnable
+        Log.w(TAG, "the radio did not finish start-up in ${START_UP_TIMEOUT_MS / 1000} s; closing the link to try again")
+        // closed() closes the session and moves on, without waiting for the link to confirm.
+        closed("The radio didn't finish start-up")
+    }
+
     private fun closed(reason: String) {
+        main.removeCallbacks(startUpTimeout)
+        // Close the old session even though it reported itself closed: with Bluetooth off it gives
+        // up before connecting and leaves its link's thread running. Closing it again is harmless,
+        // and the new generation makes its second close callback be ignored.
+        generation++
+        session?.close()
         session = null
         Log.i(TAG, "radio link closed: $reason")
         if (!wanted) return
@@ -164,6 +186,7 @@ object RadioLink {
     }
 
     private fun closeSession() {
+        main.removeCallbacks(startUpTimeout)
         // Callbacks from the old link carry an old generation and are ignored.
         generation++
         session?.close()

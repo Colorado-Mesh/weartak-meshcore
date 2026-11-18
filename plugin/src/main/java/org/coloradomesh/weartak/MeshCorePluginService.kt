@@ -26,6 +26,7 @@ import com.weartak.plugin.sdk.v2.WearTakPluginV2Contract
 import com.weartak.plugin.sdk.v2.aidl.IWearTakPluginHostControlV2
 import com.weartak.plugin.sdk.v3.aidl.IWearTakPluginHostControlV3
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /**
  * The service WearTAK binds to. It registers a transport-v1 route (with nothing behind it until
@@ -45,10 +46,16 @@ class MeshCorePluginService : Service() {
 
     /** Reports each change of the radio link to WearTAK while the plugin runs. Main thread. */
     private val onLink: (LinkState) -> Unit = { link ->
-        if (state == PluginLifecycleState.RUNNING) worker.execute { reportRoute(link) }
+        if (state == PluginLifecycleState.RUNNING) submit { reportRoute(link) }
     }
 
     @Volatile private var state = PluginLifecycleState.BOUND
+
+    /**
+     * Counts start and stop transitions. Work queued for a start checks it, so a start that a stop
+     * (or the service's end) has overtaken never takes the radio.
+     */
+    @Volatile private var lifecycle = 0
     @Volatile private var routes: PluginRouteStatusReporter? = null
     private lateinit var transport: MeshTransport
 
@@ -84,23 +91,39 @@ class MeshCorePluginService : Service() {
         state = PluginLifecycleState.READY
     }
 
+    // Synchronized so starts and stops, which arrive on Binder threads, queue their main-thread
+    // work in the order they happened.
+    @Synchronized
     private fun startEverything() {
         state = PluginLifecycleState.RUNNING
-        worker.execute { transport.register() }
+        val mine = ++lifecycle
+        submit { transport.register() }
         // RadioLink reports its state at once and on every change; see onLink.
         main.post {
+            if (lifecycle != mine) return@post
             RadioLink.start(this)
             val now = RadioLink.state
-            worker.execute { reportRoute(now) }
+            submit { reportRoute(now) }
         }
     }
 
+    @Synchronized
     private fun stopEverything(newState: PluginLifecycleState) {
         state = newState
+        lifecycle++
         main.post { RadioLink.stop() }
-        worker.execute {
+        submit {
             transport.unregister()
             routes?.clear()
+        }
+    }
+
+    /** Runs [task] on [worker], unless the service has ended and shut it down. */
+    private fun submit(task: () -> Unit) {
+        try {
+            worker.execute(task)
+        } catch (e: RejectedExecutionException) {
+            Log.d(TAG, "service ended; dropped a queued WearTAK call ($e)")
         }
     }
 

@@ -46,6 +46,7 @@ class LinkStateTest {
         )
         assertEquals("Lost the radio", friendlyReason("Connection lost (status 8, timeout)"))
         assertEquals("Bluetooth is off", friendlyReason("Bluetooth is off"))
+        assertEquals("The radio didn't finish start-up", friendlyReason("The radio didn't finish start-up"))
     }
 
     @Test

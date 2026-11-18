@@ -46,3 +46,4 @@ Send the log either way, especially for steps 3 to 5.
 - **No foreground service.** The link is kept only while WearTAK, which is bound to the plugin, runs it. Whether that's enough with the screen off for a long time is an M5 question. Retries are timed by an alarm that also fires in Doze, at most about every 9 minutes.
 - **The on/off switch on the Network Preferences row isn't offered yet.** WearTAK ties that switch to the plugin setting `forwardOutboundCot`, which also turns on its older outbound CoT forwarding. That's a question for the WearTAK dev before M4.
 - **The radio sees the plugin as "WearTAK"**, the name it gives when it says hello.
+- **A link that hasn't finished start-up after 2 minutes is closed and tried again.** That covers a radio that connects but never answers. **Try again now** works while Connecting too.
