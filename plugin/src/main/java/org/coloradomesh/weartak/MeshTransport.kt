@@ -11,8 +11,9 @@ import com.weartak.plugin.sdk.transport.model.TransportResultParcel
 import com.weartak.plugin.sdk.transport.model.TransportSendRequestParcel
 
 /**
- * The plugin's transport-v1 registration with WearTAK. M0: registers one channel with no radio
- * behind it, and refuses anything WearTAK asks it to send. M3 and M4 put the radio behind it.
+ * The plugin's transport-v1 registration with WearTAK. For now it registers one channel with
+ * nothing behind it and refuses anything WearTAK asks it to send, even with the radio linked
+ * (M2). M3 and M4 put the radio behind it.
  *
  * Call [register] and [unregister] off WearTAK's Binder threads: they call back into WearTAK.
  */

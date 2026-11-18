@@ -25,3 +25,5 @@ rootProject.name = "weartak-meshcore"
 include(":sdk")
 // The plugin app itself.
 include(":plugin")
+// The shared MeshCore protocol and Bluetooth code (submodule), as in WearMesh and the bridge.
+includeBuild("meshcore-kotlin")

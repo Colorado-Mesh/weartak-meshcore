@@ -10,6 +10,16 @@
 
     <uses-feature android:name="android.hardware.type.watch" />
 
+    <!-- The radio link. Scanning is never used to find the watch's location. No foreground
+         service: the link is kept only while WearTAK, which is bound to the plugin, runs it. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="true" />
+
     <queries>
         <!-- WearTAK release and dev builds, to check who is calling. -->
         <package android:name="com.aitech.weartak_civ" />
@@ -21,13 +31,30 @@
         android:label="@string/app_name"
         android:supportsRtl="true">
 
-        <!-- This app has no screen of its own: it runs as a plugin inside WearTAK. -->
         <uses-library
             android:name="com.google.android.wearable"
             android:required="false" />
         <meta-data
             android:name="com.google.android.wearable.standalone"
             android:value="true" />
+
+        <!-- The radio screen. WearTAK opens a plugin's launcher activity when its row in the
+             Plugins menu is tapped, so this is how the radio is chosen. -->
+        <activity
+            android:name=".RadioActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.DeviceDefault">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The radio link's retry alarm (RadioLink). -->
+        <receiver
+            android:name=".RadioLink$RetryReceiver"
+            android:exported="false" />
 
         <service
             android:name=".MeshCorePluginService"
