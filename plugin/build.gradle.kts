@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -12,8 +13,8 @@ android {
         // Wear OS 4, as for WearMesh. WearTAK itself needs API 34.
         minSdk = 33
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.0.1-dev"
+        versionCode = 2
+        versionName = "0.0.2-dev"
     }
 
     signingConfigs {
@@ -43,6 +44,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 
     compileOptions {
@@ -57,6 +59,11 @@ kotlin {
 
 dependencies {
     implementation(project(":sdk"))
+    // The Bluetooth link and session to the radio; brings in org.coloradomesh.meshcore:protocol.
+    implementation("org.coloradomesh.meshcore:ble")
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.wear.compose.material)
+    implementation(libs.wear.compose.foundation)
     testImplementation(libs.junit)
 }

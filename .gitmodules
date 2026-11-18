@@ -1,3 +1,6 @@
 [submodule "weartak-plugin-sdk"]
 	path = weartak-plugin-sdk
 	url = https://github.com/aegorsuch/weartak-plugin-sdk.git
+[submodule "meshcore-kotlin"]
+	path = meshcore-kotlin
+	url = https://github.com/Colorado-Mesh/meshcore-kotlin
