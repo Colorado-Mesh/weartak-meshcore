@@ -3,6 +3,7 @@ package org.coloradomesh.weartak
 import com.weartak.plugin.sdk.routestatus.RouteConnectionState
 import com.weartak.plugin.sdk.routestatus.RouteStatusContract
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -53,5 +54,15 @@ class LinkStateTest {
     fun retriesBackOffToFiveMinutes() {
         assertEquals(listOf(15_000L, 30_000L, 60_000L, 120_000L, 240_000L, 300_000L, 300_000L), (1..7).map { Backoff.pauseMs(it) })
         assertEquals(300_000L, Backoff.pauseMs(100))
+    }
+
+    @Test
+    fun aRadioThatAnswersNoChannelReadIsNotConnected() {
+        assertTrue(startUpHeard(slots = 8, unanswered = 0))
+        assertTrue(startUpHeard(slots = 8, unanswered = 7))
+        assertFalse(startUpHeard(slots = 8, unanswered = 8))
+        assertTrue(startUpHeard(slots = 0, unanswered = 0))
+        assertEquals(40, channelSlots(40))
+        assertEquals(8, channelSlots(0))
     }
 }

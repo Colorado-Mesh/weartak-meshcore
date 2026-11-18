@@ -14,6 +14,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import org.coloradomesh.meshcore.ble.RadioSession
 import org.coloradomesh.meshcore.protocol.CompanionClient
+import org.coloradomesh.meshcore.protocol.DeviceInfo
 import org.coloradomesh.meshcore.protocol.SelfInfo
 
 /**
@@ -120,8 +121,21 @@ object RadioLink {
         val mine = ++generation
         set(LinkState.Connecting(label()))
         val listener = object : CompanionClient.Listener {
+            // Start-up's channel reads, counted on the link's thread: a read the radio never
+            // answers still counts towards the end of start-up.
+            private var slots = 0
+            private var unansweredSlots = 0
+
             override fun onLog(message: String) {
                 Log.d(TAG, "Radio: $message")
+            }
+
+            override fun onDevice(info: DeviceInfo) {
+                slots = channelSlots(info.maxChannels)
+            }
+
+            override fun onChannelSlotsUnanswered(slots: Set<Int>) {
+                unansweredSlots = slots.size
             }
 
             override fun onSelf(info: SelfInfo) {
@@ -132,10 +146,17 @@ object RadioLink {
                 }
             }
 
-            // Start-up is through: the link works. Messages are left on the radio (see below).
+            // Start-up is through: the link works, unless the radio went quiet after the device
+            // query and every channel read timed out. Messages are left on the radio (see below).
             override fun onReady() {
+                val heard = startUpHeard(slots, unansweredSlots)
+                if (unansweredSlots > 0) Log.w(TAG, "the radio didn't answer $unansweredSlots of $slots channel slots")
                 main.post {
                     if (mine != generation || state is LinkState.Connected) return@post
+                    if (!heard) {
+                        closed("The radio stopped answering during start-up")
+                        return@post
+                    }
                     failures = 0
                     main.removeCallbacks(startUpTimeout)
                     Log.i(TAG, "radio link up: ${label()}")

@@ -89,6 +89,17 @@ fun fitBytes(text: String, maxBytes: Int): String {
     return text.substring(0, end).trimEnd() + ellipsis
 }
 
+/** Channel slots a radio has: [maxChannels] as it reports it, or 8 for firmware too old to say. */
+fun channelSlots(maxChannels: Int): Int = if (maxChannels > 0) maxChannels else 8
+
+/**
+ * Whether the radio was still answering at the end of start-up: it answered at least one of its
+ * [slots] channel reads ([unanswered] timed out). A radio that goes quiet after the device query
+ * times out on every one. Some slots unanswered means a slow or flaky radio that is still there,
+ * which is left connected rather than retried for ever.
+ */
+fun startUpHeard(slots: Int, unanswered: Int): Boolean = slots == 0 || unanswered < slots
+
 /** How long to wait before trying the radio again. */
 object Backoff {
     /** After the first failure. Doubles with each failure in a row. */
