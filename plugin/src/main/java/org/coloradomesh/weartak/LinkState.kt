@@ -62,9 +62,14 @@ fun LinkState.summary(): String = when (this) {
  */
 fun friendlyReason(reason: String): String = when {
     reason.startsWith("Could not connect") -> "Can't reach the radio: off, out of range, or in use by another app"
+    // Two apps on this watch writing over one shared connection: the other one joined after us.
+    reason.startsWith("Android refused a write") -> IN_USE_HERE
     reason.startsWith("Connection lost") -> "Lost the radio"
     else -> reason
 }
+
+/** Why the plugin won't connect: the watch is already connected to the radio for another app. */
+const val IN_USE_HERE = "In use by another app on this watch"
 
 private fun retryText(seconds: Long): String =
     if (seconds < 60) "$seconds s" else "${(seconds + 30) / 60} min"

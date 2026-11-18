@@ -115,6 +115,7 @@ class MeshCorePluginService : Service() {
         submit {
             transport.unregister()
             routes?.clear()
+            lastReport = null
         }
     }
 
@@ -127,10 +128,15 @@ class MeshCorePluginService : Service() {
         }
     }
 
+    /** The last route report sent, so the same one isn't sent twice. Only touched on [worker]. */
+    private var lastReport: RouteReport? = null
+
     /** Tells WearTAK how the radio link stands. On [worker]. */
     private fun reportRoute(link: LinkState) {
         if (state != PluginLifecycleState.RUNNING) return
         val report = link.route() ?: return
+        if (report == lastReport) return
+        lastReport = report
         val code = routes?.report(
             routeId = ROUTE_ID,
             label = ROUTE_LABEL,

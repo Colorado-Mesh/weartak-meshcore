@@ -1,8 +1,11 @@
 package org.coloradomesh.weartak
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -31,8 +34,11 @@ import org.coloradomesh.meshcore.protocol.SelfInfo
  * Handler alone stops while the watch sleeps. The pause starts short again once a link gets
  * through start-up.
  *
- * One radio per app: a radio connected to WearMesh or the MeshCore app does not answer here, and
- * the reason shown says so.
+ * One radio per app. A radio held by an app on another device doesn't advertise, so it can't be
+ * reached here. A radio held by another app on this watch, such as WearMesh in Live mode, is
+ * different: Android shares one Bluetooth connection between the apps on a device, so connecting
+ * would join that app's link and mix the two apps' traffic. So the plugin doesn't connect to a
+ * radio the watch is already connected to, and says it's in use.
  *
  * Main thread only. Callbacks from the link and the protocol client are posted to it, and each
  * carries the generation of the link it came from, so one from an old link is ignored.
@@ -49,6 +55,17 @@ object RadioLink {
      * and then stops answering during start-up would otherwise leave it Connecting for good.
      */
     private const val START_UP_TIMEOUT_MS = 120_000L
+
+    /**
+     * After the plugin closes its own link, Android can keep the connection a moment longer. A
+     * radio still connected this soon after is checked again shortly, rather than taken to be in
+     * use by another app.
+     */
+    private const val OWN_LINK_GRACE_MS = 10_000L
+    private const val OWN_LINK_RECHECK_MS = 2_000L
+
+    /** When this app last closed a link of its own, by SystemClock.elapsedRealtime. */
+    private var lastClosedAt = 0L
 
     private val main = Handler(Looper.getMainLooper())
     private val listeners = LinkedHashSet<(LinkState) -> Unit>()
@@ -118,6 +135,16 @@ object RadioLink {
         if (!hasPermission(context)) return set(LinkState.NoPermission)
         if (chosen.address != radio?.address) nodeName = null
         radio = chosen
+        if (connectedToWatch(context, chosen.address)) {
+            if (SystemClock.elapsedRealtime() - lastClosedAt < OWN_LINK_GRACE_MS) {
+                // Probably our own link, just closed and not yet gone.
+                set(LinkState.Connecting(label()))
+                main.postDelayed(retry, OWN_LINK_RECHECK_MS)
+                return
+            }
+            Log.i(TAG, "the watch is already connected to ${chosen.address}; another app holds it")
+            return waitAndRetry(IN_USE_HERE)
+        }
         val mine = ++generation
         set(LinkState.Connecting(label()))
         val listener = object : CompanionClient.Listener {
@@ -202,18 +229,38 @@ object RadioLink {
         generation++
         session?.close()
         session = null
+        lastClosedAt = SystemClock.elapsedRealtime()
         Log.i(TAG, "radio link closed: $reason")
         if (!wanted) return
+        waitAndRetry(friendlyReason(reason))
+    }
+
+    private fun waitAndRetry(reason: String) {
         failures++
         val pause = Backoff.pauseMs(failures)
-        set(LinkState.Waiting(label(), friendlyReason(reason), pause / 1000))
+        set(LinkState.Waiting(label(), reason, pause / 1000))
         scheduleRetry(pause)
+    }
+
+    /**
+     * Whether the watch already has a Bluetooth connection to [address]: Android lists a device
+     * connected by any app on the watch, not only this one.
+     */
+    @SuppressLint("MissingPermission") // connect() checks BLUETOOTH_CONNECT first
+    private fun connectedToWatch(context: Context, address: String): Boolean = try {
+        context.getSystemService(BluetoothManager::class.java)
+            ?.getConnectedDevices(BluetoothProfile.GATT)
+            ?.any { it.address.equals(address, ignoreCase = true) } == true
+    } catch (e: SecurityException) {
+        Log.w(TAG, "couldn't ask Android which devices are connected: $e")
+        false
     }
 
     private fun closeSession() {
         main.removeCallbacks(startUpTimeout)
         // Callbacks from the old link carry an old generation and are ignored.
         generation++
+        if (session != null) lastClosedAt = SystemClock.elapsedRealtime()
         session?.close()
         session = null
     }

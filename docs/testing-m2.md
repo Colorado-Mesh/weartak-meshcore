@@ -6,7 +6,7 @@ The plugin doesn't carry any mesh traffic yet; that's M3 and M4.
 
 ## Before you start
 
-- **One app per radio.** A radio connected to WearMesh, the MeshCore app or the TAK bridge doesn't advertise and can't be reached here. Disconnect it there first: quit WearMesh, or choose a different radio for it.
+- **One app per radio.** A radio connected to the MeshCore app or the TAK bridge on a phone doesn't advertise and can't be reached here. A radio connected to WearMesh on this watch can be reached, because Android shares one connection between the apps on a device, but the two apps' traffic would mix, so the plugin refuses to join it. Disconnect it there first: quit WearMesh, or choose a different radio for it.
 - Use a current WearTAK build (pipeline build 703 or later), with Network Preferences Checklist on (tap the version 8 times) to see the plugin's row.
 
 ## Install
@@ -35,7 +35,7 @@ adb -s <watch> logcat -s MeshCorePlugin CEP-PluginManager CEP-PluginConnection
 3. **Connecting.** The screen says "Connecting to …". The log shows `Link: Connecting to …`, then `route 2 "Connecting to …"`. WearTAK's home connection icon should show the MeshCore route now.
 4. **Connected.** After start-up (a few seconds, longer with many contacts), the screen says "Connected to <the radio's node name>". The log shows `radio link up: …` and `route 3 "<name>": 0`. The home connection icon and Network Preferences show MeshCore radio as connected.
 5. **Drop and recover.** Turn the radio off. Within about 30 s the screen and route say "Lost the radio. Retry in 15 s", and the pauses then grow (30 s, 1 min, 2 min, 4 min, then 5 min). Turn the radio back on. It reconnects at the next try, or at once with **Try again now**.
-6. **In use elsewhere.** Connect the radio to WearMesh, then tap **Try again now** in the plugin. The reason should read "Can't reach the radio: off, out of range, or in use by another app".
+6. **In use elsewhere.** Connect the radio to WearMesh in Live mode, then tap **Try again now** in the plugin. The plugin should not connect: the reason reads "In use by another app on this watch", and it checks again at each retry. A radio held by an app on another device (a phone) reads "Can't reach the radio: off, out of range, or in use by another app".
 7. **Plugin off and on.** In WearTAK's Plugins menu, turn MeshCore off: the log shows `radio link no longer wanted` and `Radio link closed: Disconnected`, and the radio is free for other apps. Turn it on again: it reconnects.
 8. **Forget radio.** On the plugin screen, tap **Forget radio**. The link closes and the route goes back to "No radio chosen".
 
