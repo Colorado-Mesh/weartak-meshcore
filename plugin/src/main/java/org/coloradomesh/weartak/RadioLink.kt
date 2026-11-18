@@ -45,7 +45,7 @@ object RadioLink {
     /**
      * How long a link may take, from opening to the end of start-up, before it is closed and
      * tried again. The link gives up on its own if it cannot connect, but a radio that connects
-     * and then never answers the first sync would otherwise leave it Connecting for good.
+     * and then stops answering during start-up would otherwise leave it Connecting for good.
      */
     private const val START_UP_TIMEOUT_MS = 120_000L
 
@@ -132,8 +132,8 @@ object RadioLink {
                 }
             }
 
-            // Start-up is through and the radio's message queue collected: the link works.
-            override fun onQueueEmpty() {
+            // Start-up is through: the link works. Messages are left on the radio (see below).
+            override fun onReady() {
                 main.post {
                     if (mine != generation || state is LinkState.Connected) return@post
                     failures = 0
@@ -156,6 +156,10 @@ object RadioLink {
             appName = APP_NAME,
             onLog = { Log.i(TAG, "Link: $it") },
             onClosed = { reason -> main.post { if (mine == generation) closed(reason) } },
+            // Leave messages on the radio. The radio deletes a message once an app collects it,
+            // and the plugin doesn't show messages until M3, so collecting them would lose them
+            // for WearMesh or the MeshCore app when the radio is used there later.
+            startUp = CompanionClient.StartUp(collectMessages = false),
         )
         session = opened
         main.postDelayed(startUpTimeout, START_UP_TIMEOUT_MS)
