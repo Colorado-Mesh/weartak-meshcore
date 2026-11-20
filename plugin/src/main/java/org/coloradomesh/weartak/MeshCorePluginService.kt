@@ -59,11 +59,11 @@ class MeshCorePluginService : Service() {
     @Volatile private var routes: PluginRouteStatusReporter? = null
     private lateinit var transport: MeshTransport
 
-    /** Mesh traffic as CoT (M3), handed to WearTAK through the transport on [worker]. */
-    private val feed = MeshFeed(send = { item -> submit { handle(item) } }, log = { Log.w(TAG, it) })
+    /** Mesh traffic as CoT (M3). Kept by the process, not this service: see [MeshTraffic]. */
+    private val feed get() = MeshTraffic.feed
 
-    /** Mesh chat until WearTAK takes it (the radio no longer has it). Only touched on [worker]. */
-    private val chats = ChatQueue(log = { Log.w(TAG, it) })
+    /** Takes each item from [MeshTraffic] to WearTAK on [worker]; chat is already queued there. */
+    private val sink: (MeshFeed.Item) -> Unit = { item -> submit { handle(item) } }
 
     /** Sends the markers again before they go stale, and retries waiting chat. Main thread. */
     private val refresh = object : Runnable {
@@ -78,6 +78,7 @@ class MeshCorePluginService : Service() {
         super.onCreate()
         transport = MeshTransport()
         RadioLink.addListener(onLink)
+        MeshTraffic.sink = sink
         Log.i(TAG, "created, version ${BuildConfig.VERSION_NAME}")
     }
 
@@ -87,6 +88,7 @@ class MeshCorePluginService : Service() {
     }
 
     override fun onDestroy() {
+        if (MeshTraffic.sink === sink) MeshTraffic.sink = null
         RadioLink.removeListener(onLink)
         stopEverything(PluginLifecycleState.SHUTDOWN)
         worker.shutdown()
@@ -146,11 +148,11 @@ class MeshCorePluginService : Service() {
     }
 
     /**
-     * One CoT event from the mesh, on [worker]. Chat is queued first, so it's kept if WearTAK
-     * can't take it now (or the plugin isn't running); a marker is just sent, or skipped.
+     * One CoT event from the mesh, on [worker]. Chat is already in MeshTraffic's queue, so it's
+     * kept if WearTAK can't take it now (or the plugin isn't running); a marker is just sent, or
+     * skipped.
      */
     private fun handle(item: MeshFeed.Item) {
-        if (item.chat) chats.add(item)
         if (state != PluginLifecycleState.RUNNING) return
         if (!item.chat) transport.deliver(item)
         drainChats()
@@ -158,8 +160,8 @@ class MeshCorePluginService : Service() {
 
     /** Offers WearTAK the queued chat, oldest first. On [worker]. */
     private fun drainChats() {
-        if (state != PluginLifecycleState.RUNNING || chats.size == 0) return
-        chats.drain { ChatQueue.outcomeOf(transport.deliver(it)) }
+        if (state != PluginLifecycleState.RUNNING) return
+        MeshTraffic.drainChats { ChatQueue.outcomeOf(transport.deliver(it)) }
     }
 
     /** Runs [task] on [worker], unless the service has ended and shut it down. */
