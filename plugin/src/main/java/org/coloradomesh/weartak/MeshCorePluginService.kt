@@ -161,7 +161,11 @@ class MeshCorePluginService : Service() {
     /** Offers WearTAK the queued chat, oldest first. On [worker]. */
     private fun drainChats() {
         if (state != PluginLifecycleState.RUNNING) return
-        MeshTraffic.drainChats { ChatQueue.outcomeOf(transport.deliver(it)) }
+        MeshTraffic.drainChats { item ->
+            // WearTAK may stop the plugin while a delivery waits: keep the rest for the restart.
+            if (state != PluginLifecycleState.RUNNING) ChatQueue.Outcome.WAIT
+            else ChatQueue.outcomeOf(transport.deliver(item))
+        }
     }
 
     /** Runs [task] on [worker], unless the service has ended and shut it down. */
