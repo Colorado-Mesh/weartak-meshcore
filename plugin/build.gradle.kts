@@ -13,8 +13,8 @@ android {
         // Wear OS 4, as for WearMesh. WearTAK itself needs API 34.
         minSdk = 33
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.0.2-dev"
+        versionCode = 3
+        versionName = "0.0.3-dev"
     }
 
     signingConfigs {
@@ -61,6 +61,8 @@ dependencies {
     implementation(project(":sdk"))
     // The Bluetooth link and session to the radio; brings in org.coloradomesh.meshcore:protocol.
     implementation("org.coloradomesh.meshcore:ble")
+    // Mesh to CoT (MeshPicture, CotEvents), shared with the bridge.
+    implementation("org.coloradomesh.meshcore:tak")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.wear.compose.material)

@@ -16,8 +16,12 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import org.coloradomesh.meshcore.ble.RadioSession
+import org.coloradomesh.meshcore.protocol.Channel
+import org.coloradomesh.meshcore.protocol.ChannelMessage
 import org.coloradomesh.meshcore.protocol.CompanionClient
+import org.coloradomesh.meshcore.protocol.Contact
 import org.coloradomesh.meshcore.protocol.DeviceInfo
+import org.coloradomesh.meshcore.protocol.DirectMessage
 import org.coloradomesh.meshcore.protocol.SelfInfo
 
 /**
@@ -73,7 +77,15 @@ object RadioLink {
     private var app: Context? = null
     private var wanted = false
     private var session: RadioSession? = null
-    private var generation = 0
+
+    /** Read on the link's thread too, to drop events from a link already replaced. */
+    @Volatile private var generation = 0
+
+    /**
+     * Where the radio's contacts, channels and messages go (M3): the plugin service sets it while
+     * WearTAK runs the plugin. Called on the link's thread, except onReady, on the main thread.
+     */
+    @Volatile var feed: MeshFeed? = null
     private var failures = 0
     private var radio: ChosenRadio? = null
 
@@ -165,7 +177,24 @@ object RadioLink {
                 unansweredSlots = slots.size
             }
 
+            override fun onContact(contact: Contact) {
+                if (mine == generation) feed?.onContact(contact)
+            }
+
+            override fun onChannels(channels: List<Channel>) {
+                if (mine == generation) feed?.onChannels(channels)
+            }
+
+            override fun onChannelMessage(message: ChannelMessage) {
+                if (mine == generation) feed?.onChannelMessage(message)
+            }
+
+            override fun onDirectMessage(message: DirectMessage) {
+                if (mine == generation) feed?.onDirectMessage(message)
+            }
+
             override fun onSelf(info: SelfInfo) {
+                if (mine == generation) feed?.onSelf(info)
                 main.post {
                     if (mine != generation) return@post
                     nodeName = info.name.takeIf { it.isNotBlank() }
@@ -188,6 +217,7 @@ object RadioLink {
                     main.removeCallbacks(startUpTimeout)
                     Log.i(TAG, "radio link up: ${label()}")
                     set(LinkState.Connected(label()))
+                    feed?.onReady()
                 }
             }
 
@@ -204,10 +234,9 @@ object RadioLink {
             appName = APP_NAME,
             onLog = { Log.i(TAG, "Link: $it") },
             onClosed = { reason -> main.post { if (mine == generation) closed(reason) } },
-            // Leave messages on the radio. The radio deletes a message once an app collects it,
-            // and the plugin doesn't show messages until M3, so collecting them would lose them
-            // for WearMesh or the MeshCore app when the radio is used there later.
-            startUp = CompanionClient.StartUp(collectMessages = false),
+            // Messages are collected and shown in WearTAK (M3). The radio deletes a message once
+            // it's collected, so while the plugin holds the radio, messages are WearTAK's.
+            startUp = CompanionClient.StartUp(collectMessages = true),
         )
         session = opened
         main.postDelayed(startUpTimeout, START_UP_TIMEOUT_MS)
@@ -229,6 +258,7 @@ object RadioLink {
         generation++
         session?.close()
         session = null
+        feed?.reset()
         lastClosedAt = SystemClock.elapsedRealtime()
         Log.i(TAG, "radio link closed: $reason")
         if (!wanted) return
@@ -262,6 +292,7 @@ object RadioLink {
         generation++
         if (session != null) lastClosedAt = SystemClock.elapsedRealtime()
         session?.close()
+        feed?.reset()
         session = null
     }
 

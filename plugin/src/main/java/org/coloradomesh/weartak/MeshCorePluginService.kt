@@ -29,10 +29,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
 /**
- * The service WearTAK binds to. It registers a transport-v1 route (with nothing behind it until
- * M3) and, while WearTAK runs the plugin, keeps the link to the chosen radio ([RadioLink]) and
- * reports how it stands as the "MeshCore radio" route: Connecting, Connected, or Disconnected
- * with the reason. WearTAK's home connection icon shows the route once it is Connecting or
+ * The service WearTAK binds to. It registers a transport-v1 route and, while WearTAK runs the
+ * plugin, keeps the link to the chosen radio ([RadioLink]), passes what the radio reports to
+ * WearTAK as CoT ([MeshFeed], M3), and reports how the link stands as the "MeshCore radio"
+ * route: Connecting, Connected, or Disconnected with the reason. WearTAK's home connection icon shows the route once it is Connecting or
  * Connected. Everything is logged under the tag "MeshCorePlugin".
  *
  * WearTAK calls these methods on Binder threads and waits for each to return, so anything that
@@ -58,6 +58,17 @@ class MeshCorePluginService : Service() {
     @Volatile private var lifecycle = 0
     @Volatile private var routes: PluginRouteStatusReporter? = null
     private lateinit var transport: MeshTransport
+
+    /** Mesh traffic as CoT (M3), handed to WearTAK through the transport on [worker]. */
+    private val feed = MeshFeed(send = { item -> submit { if (state == PluginLifecycleState.RUNNING) transport.deliver(item) } })
+
+    /** Sends the markers again before they go stale, while the plugin runs. Main thread. */
+    private val refresh = object : Runnable {
+        override fun run() {
+            feed.refreshMarkers()
+            main.postDelayed(this, MeshFeed.REFRESH.toMillis())
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -101,6 +112,9 @@ class MeshCorePluginService : Service() {
         // RadioLink reports its state at once and on every change; see onLink.
         main.post {
             if (lifecycle != mine) return@post
+            RadioLink.feed = feed
+            main.removeCallbacks(refresh)
+            main.postDelayed(refresh, MeshFeed.REFRESH.toMillis())
             RadioLink.start(this)
             val now = RadioLink.state
             submit { reportRoute(now) }
@@ -111,7 +125,12 @@ class MeshCorePluginService : Service() {
     private fun stopEverything(newState: PluginLifecycleState) {
         state = newState
         lifecycle++
-        main.post { RadioLink.stop() }
+        main.post {
+            main.removeCallbacks(refresh)
+            RadioLink.feed = null
+            RadioLink.stop()
+            feed.reset()
+        }
         submit {
             transport.unregister()
             routes?.clear()
@@ -202,7 +221,12 @@ class MeshCorePluginService : Service() {
         override fun applySettings(values: Bundle?) = Unit
         override fun applySettingsWithResult(values: Bundle?, applyMode: Int) =
             SettingsApplyResultParcel(success = true, applyMode = applyMode)
-        override fun onHostSettingsChanged(hostSettings: HostSettingsParcel?) = Unit
+        // Mesh chat is addressed to the user's callsign (see WearTakChat).
+        override fun onHostSettingsChanged(hostSettings: HostSettingsParcel?) {
+            val callsign = hostSettings?.callsign.orEmpty()
+            Log.i(TAG, "host settings: callsign ${if (callsign.isBlank()) "not set" else "\"$callsign\""}")
+            feed.setCallsign(callsign)
+        }
 
         override fun getMainUiSchema() = PluginMainUiSchemaParcel()
         override fun getMainUiState() = Bundle()
