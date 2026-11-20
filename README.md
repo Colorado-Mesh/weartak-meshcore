@@ -4,7 +4,9 @@ A [WearTAK](https://github.com/aegorsuch/weartak-wearos) plugin that connects We
 
 ## Status
 
-**M2, in testing.** The plugin keeps a Bluetooth link to a chosen MeshCore radio while WearTAK runs it, and reports the link as WearTAK's "MeshCore radio" route: connecting, connected, or disconnected with the reason. It carries no mesh traffic yet. Its own screen, opened from WearTAK's Plugins menu, finds and chooses the radio. How to try it is in [docs/testing-m2.md](docs/testing-m2.md).
+**M3, in testing.** While WearTAK runs the plugin, mesh traffic from the chosen MeshCore radio appears in WearTAK. Nodes with a position show on the map; companions also appear in WearTAK's contacts. Each mesh channel and each node you hear from in a DM is its own WearTAK conversation, named after the channel (`#Public`) or the node. Replying to the mesh is M4. How to try it is in [docs/testing-m3.md](docs/testing-m3.md).
+
+M2 (the radio link, shown as WearTAK's "MeshCore radio" route) passed on 18 November 2026; see [docs/testing-m2.md](docs/testing-m2.md).
 
 M0 (WearTAK admits and initialises the plugin) passed on 16 November 2026; see [docs/testing-m0.md](docs/testing-m0.md). M1 (the shared `tak` module) merged in meshcore-kotlin and the bridge on 17 November.
 
