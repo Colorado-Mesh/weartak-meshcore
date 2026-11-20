@@ -29,14 +29,26 @@ import java.time.Instant
  *   one is sent at once when its node changes. WearTAK admits a limited number of messages per
  *   transport session, so the plugin sends no more than it needs to.
  * - Chat is addressed to the user's callsign ([WearTakChat]), so it waits until WearTAK has
- *   said what that is.
+ *   said what that is. The radio deletes a message once it's collected, so waiting messages are
+ *   kept through a lost link (up to [MAX_HELD], the oldest dropped through [log]); once sent,
+ *   the plugin service queues them until WearTAK takes them ([ChatQueue]).
  */
 class MeshFeed(
     private val send: (Item) -> Unit,
     private val clock: () -> Instant = Instant::now,
+    private val log: (String) -> Unit = {},
 ) {
-    /** One CoT event for WearTAK, with the identity the transport reports it under. */
-    data class Item(val messageId: String, val senderUid: String, val senderCallsign: String?, val xml: String)
+    /**
+     * One CoT event for WearTAK, with the identity the transport reports it under. [chat] for a
+     * message, which must not be lost; a marker is sent again at the next refresh anyway.
+     */
+    data class Item(
+        val messageId: String,
+        val senderUid: String,
+        val senderCallsign: String?,
+        val xml: String,
+        val chat: Boolean = false,
+    )
 
     private val picture = MeshPicture(APP_NAME).apply { maxAgeSeconds = MAX_AGE.seconds }
     private var callsign: String? = null
@@ -89,13 +101,15 @@ class MeshFeed(
         if (ready) refreshMarkersLocked()
     }
 
-    /** The link ended or the plugin stopped: forget the radio's picture until it's read again. */
+    /**
+     * The link ended or the plugin stopped: forget the radio's picture until it's read again.
+     * Messages waiting for the callsign are kept: the radio no longer has them.
+     */
     @Synchronized
     fun reset() {
         ready = false
         picture.clear()
         lastAdvert.clear()
-        held.clear()
     }
 
     private fun refreshMarkersLocked() {
@@ -119,7 +133,10 @@ class MeshFeed(
     private fun deliverOrHold(message: Any) {
         if (callsign == null) {
             held.addLast(message)
-            while (held.size > MAX_HELD) held.removeFirst()
+            while (held.size > MAX_HELD) {
+                held.removeFirst()
+                log("still no WearTAK callsign; dropped the oldest of $MAX_HELD waiting messages")
+            }
             return
         }
         deliver(message)
@@ -134,7 +151,7 @@ class MeshFeed(
             is DirectMessage -> picture.directLine(message, user)
             else -> return
         }
-        send(Item(spec.messageId, spec.senderUid, spec.senderCallsign, WearTakChat.direct(spec, to, clock())))
+        send(Item(spec.messageId, spec.senderUid, spec.senderCallsign, WearTakChat.direct(spec, to, clock()), chat = true))
     }
 
     companion object {
@@ -147,7 +164,7 @@ class MeshFeed(
         val REFRESH: Duration = Duration.ofMinutes(15)
 
         /** Messages kept while waiting for the user's callsign. */
-        const val MAX_HELD = 50
+        const val MAX_HELD = 200
 
         /** MECP (emergency) markers aren't sent yet; a later step. */
         private const val MECP_PREFIX = "MECP-"

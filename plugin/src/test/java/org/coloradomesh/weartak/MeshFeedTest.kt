@@ -123,4 +123,40 @@ class MeshFeedTest {
         feed.onContact(node(1, "Ridge", 40.0, -105.2))
         assertTrue(sent.isEmpty())
     }
+
+    @Test
+    fun messagesWaitingForTheCallsignSurviveALostLink() {
+        startUp()
+        feed.onReady()
+        sent.clear()
+        feed.onChannelMessage(ChannelMessage(0, "Alice: hello", now.epochSecond))
+        feed.reset()
+        // The link comes back and start-up runs again before WearTAK says the callsign.
+        startUp()
+        feed.onReady()
+        sent.clear()
+        feed.setCallsign("BUD")
+        val chat = sent.single()
+        assertTrue(chat.chat)
+        assertTrue(chat.xml.contains(">Alice: hello</remarks>"))
+    }
+
+    @Test
+    fun markersAreNotChat() {
+        startUp(node(1, "Ridge", 40.0, -105.2))
+        feed.onReady()
+        assertTrue(sent.none { it.chat })
+    }
+
+    @Test
+    fun theOldestWaitingMessageGoesPastTheLimitAndSaysSo() {
+        val logs = ArrayList<String>()
+        val waiting = MeshFeed(send = { sent.add(it) }, clock = { now }, log = { logs.add(it) })
+        waiting.onChannels(listOf(Channel(0, "Public", Channel.Kind.PUBLIC)))
+        repeat(MeshFeed.MAX_HELD + 2) { waiting.onChannelMessage(ChannelMessage(0, "n: $it", now.epochSecond)) }
+        assertEquals(2, logs.size)
+        waiting.setCallsign("BUD")
+        assertEquals(MeshFeed.MAX_HELD, sent.size)
+        assertTrue(sent.first().xml.contains(">n: 2</remarks>"))
+    }
 }

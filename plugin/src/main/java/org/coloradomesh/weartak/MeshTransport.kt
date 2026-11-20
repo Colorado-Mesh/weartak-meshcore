@@ -22,13 +22,20 @@ import com.weartak.plugin.sdk.transport.model.TransportSendRequestParcel
  * frees them, so before a session fills up ([SESSION_BUDGET]) the plugin closes it and registers a
  * new one. A delivery refused for a full session is retried once on a new session.
  *
+ * A session belongs to the WearTAK host that issued it. If WearTAK hands the plugin a new host
+ * ([attach]), the old session is forgotten and the next delivery registers with the new host.
+ *
  * Call [register], [unregister] and [deliver] off WearTAK's Binder threads (the plugin service's
  * worker): they call into WearTAK and wait.
  */
 class MeshTransport {
 
+    /** A transport session and the host that issued it. */
+    private class Session(val host: IPluginTransportHostV1, val id: String)
+
+    private val lock = Any()
     @Volatile private var host: IPluginTransportHostV1? = null
-    @Volatile private var sessionId: String? = null
+    @Volatile private var session: Session? = null
 
     /** Messages WearTAK has admitted on this session. Only touched on the worker. */
     private var used = 0
@@ -36,7 +43,14 @@ class MeshTransport {
     val hasHost: Boolean get() = host != null
 
     fun attach(host: IPluginTransportHostV1?) {
-        this.host = host
+        synchronized(lock) {
+            if (host?.asBinder() !== this.host?.asBinder()) {
+                // A session from the previous host means nothing to this one.
+                if (session != null) Log.i(TAG, "WearTAK's transport host changed; forgetting the old session")
+                session = null
+            }
+            this.host = host
+        }
     }
 
     fun register() {
@@ -69,16 +83,30 @@ class MeshTransport {
             Log.w(TAG, "registerTransport failed", e)
             return
         }
-        sessionId = result.sessionId.takeIf { result.code == TransportResultCode.ACCEPTED }
-        used = 0
+        val id = result.sessionId.takeIf { result.code == TransportResultCode.ACCEPTED }
+        val kept = synchronized(lock) {
+            // The host changed while this registration was under way: don't pair its session
+            // with the new host.
+            if (this.host !== host) {
+                false
+            } else {
+                session = id?.let { Session(host, it) }
+                used = 0
+                true
+            }
+        }
+        if (!kept) {
+            Log.i(TAG, "registerTransport answered by a host no longer current; not kept")
+            if (id != null) runCatching { host.unregisterTransport(id) }
+            return
+        }
         Log.i(TAG, "registerTransport: code ${result.code}, session ${result.sessionId}, ${result.detail ?: "no detail"}")
     }
 
     fun unregister() {
-        val session = sessionId ?: return
-        sessionId = null
+        val current = synchronized(lock) { session.also { session = null } } ?: return
         try {
-            val result = host?.unregisterTransport(session)
+            val result = current.host.unregisterTransport(current.id)
             Log.i(TAG, "unregisterTransport: code ${result?.code}")
         } catch (e: Exception) {
             Log.w(TAG, "unregisterTransport failed", e)
@@ -90,12 +118,21 @@ class MeshTransport {
      * is no transport to hand it to.
      */
     fun deliver(item: MeshFeed.Item): Int? {
-        val host = host ?: return null
-        if (sessionId == null || used >= SESSION_BUDGET) renew("session ${if (sessionId == null) "missing" else "nearly full"}")
+        val host = host ?: run {
+            Log.d(TAG, "no transport host; ${item.messageId} not delivered")
+            return null
+        }
+        val current = session
+        when {
+            current == null -> renew("no session")
+            current.host !== host -> renew("session from another host")
+            used >= SESSION_BUDGET -> renew("session nearly full")
+        }
         var code = receive(host, item) ?: return null
-        if (code == TransportResultCode.LIMIT_EXCEEDED) {
-            // Full after all (WearTAK counts what it admitted before a restart of ours, say).
-            renew("session full")
+        if (code == TransportResultCode.LIMIT_EXCEEDED || code == TransportResultCode.INACTIVE_SESSION) {
+            // Full after all (WearTAK counts what it admitted before a restart of ours, say), or
+            // a session WearTAK has closed: once more on a new one.
+            renew(if (code == TransportResultCode.LIMIT_EXCEEDED) "session full" else "session inactive")
             code = receive(host, item) ?: return null
         }
         when (code) {
@@ -108,7 +145,7 @@ class MeshTransport {
     }
 
     private fun receive(host: IPluginTransportHostV1, item: MeshFeed.Item): Int? {
-        val session = sessionId ?: return null
+        val id = session?.takeIf { it.host === host }?.id ?: return null
         val message = TransportMessageParcel(
             messageId = item.messageId,
             payloadKind = TransportPayloadKind.COT_XML_UTF8,
@@ -118,7 +155,7 @@ class MeshTransport {
             sentAtEpochMillis = System.currentTimeMillis(),
         )
         return try {
-            val result = host.receiveMessage(session, CHANNEL_ID, message)
+            val result = host.receiveMessage(id, CHANNEL_ID, message)
             if (result.code != TransportResultCode.ACCEPTED && result.code != TransportResultCode.DUPLICATE) {
                 Log.d(TAG, "receiveMessage ${item.messageId}: code ${result.code}, ${result.detail ?: "no detail"}")
             }
@@ -151,7 +188,7 @@ class MeshTransport {
 
         override fun onSessionClosed(sessionId: String, reason: Int) {
             Log.i(TAG, "transport session $sessionId closed by WearTAK, reason $reason")
-            if (this@MeshTransport.sessionId == sessionId) this@MeshTransport.sessionId = null
+            synchronized(lock) { if (session?.id == sessionId) session = null }
         }
     }
 

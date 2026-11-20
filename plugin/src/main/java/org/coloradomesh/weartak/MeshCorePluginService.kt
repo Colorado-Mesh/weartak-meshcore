@@ -60,12 +60,16 @@ class MeshCorePluginService : Service() {
     private lateinit var transport: MeshTransport
 
     /** Mesh traffic as CoT (M3), handed to WearTAK through the transport on [worker]. */
-    private val feed = MeshFeed(send = { item -> submit { if (state == PluginLifecycleState.RUNNING) transport.deliver(item) } })
+    private val feed = MeshFeed(send = { item -> submit { handle(item) } }, log = { Log.w(TAG, it) })
 
-    /** Sends the markers again before they go stale, while the plugin runs. Main thread. */
+    /** Mesh chat until WearTAK takes it (the radio no longer has it). Only touched on [worker]. */
+    private val chats = ChatQueue(log = { Log.w(TAG, it) })
+
+    /** Sends the markers again before they go stale, and retries waiting chat. Main thread. */
     private val refresh = object : Runnable {
         override fun run() {
             feed.refreshMarkers()
+            submit { drainChats() }
             main.postDelayed(this, MeshFeed.REFRESH.toMillis())
         }
     }
@@ -108,7 +112,10 @@ class MeshCorePluginService : Service() {
     private fun startEverything() {
         state = PluginLifecycleState.RUNNING
         val mine = ++lifecycle
-        submit { transport.register() }
+        submit {
+            transport.register()
+            drainChats()
+        }
         // RadioLink reports its state at once and on every change; see onLink.
         main.post {
             if (lifecycle != mine) return@post
@@ -136,6 +143,23 @@ class MeshCorePluginService : Service() {
             routes?.clear()
             lastReport = null
         }
+    }
+
+    /**
+     * One CoT event from the mesh, on [worker]. Chat is queued first, so it's kept if WearTAK
+     * can't take it now (or the plugin isn't running); a marker is just sent, or skipped.
+     */
+    private fun handle(item: MeshFeed.Item) {
+        if (item.chat) chats.add(item)
+        if (state != PluginLifecycleState.RUNNING) return
+        if (!item.chat) transport.deliver(item)
+        drainChats()
+    }
+
+    /** Offers WearTAK the queued chat, oldest first. On [worker]. */
+    private fun drainChats() {
+        if (state != PluginLifecycleState.RUNNING || chats.size == 0) return
+        chats.drain { ChatQueue.outcomeOf(transport.deliver(it)) }
     }
 
     /** Runs [task] on [worker], unless the service has ended and shut it down. */
